@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wezva-deployment
+  labels:
+    app: wezva-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wezva-app
+  template:
+    metadata:
+      labels:
+        app: wezva-app
+    spec:
+      containers:
+      - name: web-server
+        image: python:3.10-slim
+        command: ["python3", "-c"]
+        args:
+        - |
+          import http.server, socketserver
+
+          class RouteHandler(http.server.SimpleHTTPRequestHandler):
+              def do_GET(self):
+                  # Valid path defined in the application
+                  if self.path == "/healthz":
+                      self.send_response(200)
+                      self.send_header("Content-Type", "text/plain; charset=utf-8")
+                      self.end_headers()
+                      self.wfile.write("🚀 200 OK: Application asset found!\n".encode("utf-8"))
+                  else:
+                      # 📌 INTENTIONAL DEFECT: Unmapped paths return 404
+                      self.send_response(404)
+                      self.send_header("Content-Type", "text/plain; charset=utf-8")
+                      self.end_headers()
+                      self.wfile.write(f"❌ 404 Not Found: Path '{self.path}' does not match any code assets.\n".encode("utf-8"))
+
+          socketserver.TCPServer.allow_reuse_address = True
+          with socketserver.TCPServer(("0.0.0.0", 8080), RouteHandler) as httpd:
+              httpd.serve_forever()
+        ports:
+        - containerPort: 8080
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 2
+          periodSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wezva-service
+spec:
+  selector:
+    app: wezva-app
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wezva-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: wezva-service
+            port:
+              number: 80

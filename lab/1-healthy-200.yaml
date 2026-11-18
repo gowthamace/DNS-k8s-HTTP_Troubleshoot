@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: GS-deployment
+  labels:
+    app: GS-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: GS-app
+  template:
+    metadata:
+      labels:
+        app: GS-app
+    spec:
+      containers:
+      - name: web-server
+        image: python:3.10-slim
+        command: ["python3", "-c"]
+        args:
+        - |
+          import http.server, socketserver
+          class Handler(http.server.SimpleHTTPRequestHandler):
+              def do_GET(self):
+                  self.send_response(200)
+                  self.send_header("Content-Type", "text/plain; charset=utf-8")
+                  self.end_headers()
+                  self.wfile.write("🚀 200 OK: Welcome to WezvaTech K8s Lab Baseline!\n".encode("utf-8"))
+
+          socketserver.TCPServer.allow_reuse_address = True
+          with socketserver.TCPServer(("0.0.0.0", 8080), Handler) as httpd:
+              httpd.serve_forever()
+        ports:
+        - containerPort: 8080
+          name: http
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 2
+          periodSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: GS-service
+spec:
+  selector:
+    app: GS-app
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: GS-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: GS-service
+            port:
+              number: 80
